@@ -1,7 +1,28 @@
 import numpy as np
+from scipy.special import gamma
 
 class FEO:
     def __init__(self, temperature, L2_regularized=False, w=0.1):
+        """
+        Builds a multivariate linear regression model that is trained with free energy optimization
+
+        Initialize: 
+        temperature: float, temperature setting
+        L2_regularized: include L2_regularization or not, default=False
+        w: L2 weight, default=0.1, ignored if L2_regularized=False
+
+        Methods:
+        FEO.fit(x, y, fixed_u_star, u_star_mul)
+            fit the model with training sample (x, y)
+            x: numpy.ndarray, shape = (n, d) where n is number of training points, d is number of features of x
+            y: numpy.ndarray, shape = (n, 1) where n is number of training points
+            fixed_u_star: whether to compute optimal loss based on temperature, default=False 
+            u_star_mul: float, manually set the optimal loss=u_star_mul, ignored if fixed_u_star=False
+        
+        FEO.predict(x, n_models)
+            predict with new input
+        """
+                
         self.temp = temperature
         self.L2_regularized = L2_regularized
         self.w = w
@@ -23,6 +44,16 @@ class FEO:
             self._fit_underdetermined(x, y, rank, A, fixed_u_star, u_star_mul)
         else:
             self._fit_determined(x, y, n, A, fixed_u_star, u_star_mul)
+
+    def predict(self, x, n_models=100):
+        if not self.fitted:
+            print("Model not fitted yet!")
+            return
+        
+        theta_samples = self._sample(n_models)
+        self.theta_samples = theta_samples
+        y_pred_FEO = x @ theta_samples
+        return y_pred_FEO
 
     def _get_conics(self, n, A, b, c0):
         # center & eigendecomposition of A
@@ -106,16 +137,6 @@ class FEO:
         self.K = K
         self.Theta = Theta
         self.fitted = True
-
-    def predict(self, x, n_models=100):
-        if not self.fitted:
-            print("Model not fitted yet!")
-            return
-        
-        theta_samples = self._sample(n_models)
-        self.theta_samples = theta_samples
-        y_pred_FEO = x @ theta_samples
-        return y_pred_FEO
 
     def _sample(self, n_models):
         if self.rank < self.n:
@@ -208,7 +229,7 @@ class FEO:
         for i in range(n-Null.shape[1]-1): # number of axes = rank (=n-DOF), number to generate = rank-1 since theta_ln is already 1 axis
             n_orthogonals = orthogonals.shape[1]
             axis = np.zeros((n, 1))
-            axis[:n_orthogonals+1] = nd_cross(orthogonals[:n_orthogonals+1])
+            axis[:n_orthogonals+1] = self._nd_cross(orthogonals[:n_orthogonals+1])
             axis /= np.linalg.norm(axis)
             orthogonals = np.hstack((orthogonals, axis))
 
@@ -227,7 +248,7 @@ class FEO:
         ns = vh[nnz:].conj().T
         return ns
     
-    
+
 
 class EnsembleModel:
     def __init__(self, thetas, method='norm', weighting='recip', alpha=1):
